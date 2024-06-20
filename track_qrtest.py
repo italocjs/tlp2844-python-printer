@@ -10,14 +10,6 @@ LABEL_SPACING_MM = 4
 # Conversion factor from mm to dots (203 DPI -> 203 dots/inch -> 203/25.4 dots/mm ≈ 8 dots/mm)
 MM_TO_DOTS = 203 / 25.4
 
-# Define variables for placeholders
-serial = "SMV_TRACK_032"
-uuid = "100180"
-ble = "00:00:00:00:00:00"
-hw = "1.3.4"
-fw = "4.4.0"
-reserved = "0x000000000000"
-
 def prepare_qr_payload(serial, uuid, ble, hw, fw, reserved):
     return f"""
 SERIAL={serial}
@@ -82,21 +74,41 @@ def make_image(xpos_mm, ypos_mm, image_path):
     return f"GW{xpos},{ypos},{(width + 7) // 8},{height},", hex_data
 
 def main():
+    # Ensure .cache directory exists
+    cache_dir = os.path.abspath('.cache')
+    if not os.path.exists(cache_dir):
+        os.makedirs(cache_dir)
+
     # Prepare QR code payloads
-    left_qr_payload = prepare_qr_payload(serial, uuid, ble, hw, fw, reserved)
-    right_qr_payload = prepare_qr_payload(serial, uuid, ble, hw, fw, reserved)
+    left_qr_serial = "SMV_TRACK_001"
+    left_qr_uuid = "100001"
+    left_qr_ble = "00:00:00:00:00:01"
+    left_qr_hw = "1.3.4"
+    left_qr_fw = "4.4.0"
+    left_qr_reserved = "0x000000000000"
+
+    right_qr_serial = "SMV_TRACK_033"
+    right_qr_uuid = "100002"
+    right_qr_ble = "00:00:00:00:00:02"
+    right_qr_hw = "1.3.4"
+    right_qr_fw = "4.4.0"
+    right_qr_reserved = "0x000000000000"
+
+    left_qr_payload = prepare_qr_payload(left_qr_serial, left_qr_uuid, left_qr_ble, left_qr_hw, left_qr_fw, left_qr_reserved)
+    right_qr_payload = prepare_qr_payload(right_qr_serial, right_qr_uuid, right_qr_ble, right_qr_hw, right_qr_fw, right_qr_reserved)
 
     # Create the QR code images
     qr_code_size_mm = 35
     dpi = 203  # Dots per inch for Zebra TLP2844
-    create_qr_code(left_qr_payload, qr_code_size_mm, dpi, 'left_qr_code.png')
-    create_qr_code(right_qr_payload, qr_code_size_mm, dpi, 'right_qr_code.png')
+    create_qr_code(left_qr_payload, qr_code_size_mm, dpi, os.path.join(cache_dir, 'left_qr_code.png'))
+    create_qr_code(right_qr_payload, qr_code_size_mm, dpi, os.path.join(cache_dir, 'right_qr_code.png'))
 
     # Calculate the position for the graphic
     x_position = (int(LABEL_WIDTH_MM * MM_TO_DOTS) - int(qr_code_size_mm * MM_TO_DOTS)) // 2
     y_position = (int(LABEL_HEIGHT_MM * MM_TO_DOTS) - int(qr_code_size_mm * MM_TO_DOTS)) // 2
 
-    with open('output.prn', 'wb') as f:
+    output_file = os.path.join(cache_dir, 'output.prn')
+    with open(output_file, 'wb') as f:
         f.write(b"I8,A,001\n")
         f.write(b"\n")
         f.write(b"Q480,024\n")
@@ -112,12 +124,14 @@ def main():
         f.write(b"N\n")
         
         # Add the left image
-        image_cmd, hex_data = make_image(x_position / MM_TO_DOTS, y_position / MM_TO_DOTS, 'left_qr_code.png')
+        image_cmd, hex_data = make_image(x_position / MM_TO_DOTS, y_position / MM_TO_DOTS, os.path.join(cache_dir, 'left_qr_code.png'))
+        print(f"Debug: Adding left image with command: {image_cmd}")
         f.write(image_cmd.encode() + hex_data + b"\n")
 
         # Add the right image
         right_label_x = LABEL_WIDTH_MM + LABEL_SPACING_MM
-        image_cmd, hex_data = make_image((right_label_x + x_position / MM_TO_DOTS), y_position / MM_TO_DOTS, 'right_qr_code.png')
+        image_cmd, hex_data = make_image((right_label_x + x_position / MM_TO_DOTS), y_position / MM_TO_DOTS, os.path.join(cache_dir, 'right_qr_code.png'))
+        print(f"Debug: Adding right image with command: {image_cmd}")
         f.write(image_cmd.encode() + hex_data + b"\n")
         
         # Add text labels
@@ -135,8 +149,8 @@ def main():
     # os.system('net use LPT1: \\localhost\\ZebraTLP2844 /persistent:yes')
 
     # Send the file to the printer
-    print("Printing output.prn")
-    # os.system('COPY /B output.prn LPT1')
+    print(f"Printing {output_file}")
+    os.system(f'COPY /B "{output_file}" LPT1')
 
 if __name__ == "__main__":
     main()
